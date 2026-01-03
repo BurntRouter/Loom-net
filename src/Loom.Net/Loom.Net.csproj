@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <EnablePreviewFeatures>true</EnablePreviewFeatures>
     <NoWarn>$(NoWarn);CA2252</NoWarn>
-    <PackageId>Loom-net.1.0.0</PackageId>
+    <PackageId>Loom-net</PackageId>
     <Version>1.0.0</Version>
     <Authors>BurntRouter</Authors>
   </PropertyGroup>
