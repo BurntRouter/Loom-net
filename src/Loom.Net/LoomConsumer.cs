@@ -60,6 +60,8 @@ public sealed class LoomConsumer : IAsyncDisposable
         var tls = new QuicClientConnectionOptions
         {
             RemoteEndPoint = new DnsEndPoint(parts[0], int.Parse(parts[1])),
+            DefaultCloseErrorCode = 0,
+            DefaultStreamErrorCode = 0,
             ClientAuthenticationOptions = new SslClientAuthenticationOptions
             {
                 TargetHost = _opt.Tls?.ServerName ?? parts[0],
