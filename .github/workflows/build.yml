@@ -1,0 +1,56 @@
+name: Build & Publish
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-test-pack-publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Loom.Net.sln
+
+      - name: Build
+        run: dotnet build Loom.Net.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test Loom.Net.sln -c Release --no-build
+
+      - name: Compute version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Pack
+        run: |
+          if [ -n "${VERSION:-}" ]; then
+            dotnet pack src/Loom.Net/Loom.Net.csproj -c Release -o artifacts /p:Version="$VERSION" --no-build
+          else
+            dotnet pack src/Loom.Net/Loom.Net.csproj -c Release -o artifacts --no-build
+          fi
+
+      - name: NuGet login (Trusted Publishing)
+        uses: NuGet/login@v1
+        id: nuget_login
+        with:
+          user: ${{ vars.NUGET_USERNAME }}
+
+      - name: Publish
+        run: dotnet nuget push artifacts/*.nupkg --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
