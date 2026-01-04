@@ -1,3 +1,5 @@
+using System;
+
 namespace Loom.Net;
 
 public enum LoomTransport
@@ -20,5 +22,8 @@ public sealed record LoomClientOptions(
     LoomTlsOptions? Tls = null,
     string Name = "client",
     string Room = "default",
-    string Token = ""
+    string Token = "",
+    bool AutoReconnect = true,
+    TimeSpan? ReconnectDelay = null,
+    int MaxReconnectAttempts = 0
 );

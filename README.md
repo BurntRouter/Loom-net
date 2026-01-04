@@ -54,6 +54,8 @@ await consumer.ConsumeLoopAsync(async (key, body, declaredSize, ct) =>
 
 ## Notes
 
+- **AutoReconnect** is enabled by default for both producer and consumer; pass `AutoReconnect: false` to disable.
+- `ReconnectDelay` (default 1s) and `MaxReconnectAttempts` (0 = forever) control reconnect behavior.
 - .NET QUIC client keepalive is runtime/version dependent; if you hit idle timeouts, enable keepalive on the **Loom server** (recommended).
 - For production, configure real TLS and set `InsecureSkipVerify=false`.
 

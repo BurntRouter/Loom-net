@@ -58,6 +58,34 @@ public sealed class LoomProducer : IAsyncDisposable
     public async Task ProduceAsync(byte[] key, Stream payload, ulong declaredSize = 0, int chunkSize = 64 * 1024, CancellationToken ct = default)
     {
         if (_stream == null) throw new InvalidOperationException("not connected");
+
+        var startPos = payload.CanSeek ? payload.Position : 0;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                await ProduceOnceAsync(key, payload, declaredSize, chunkSize, ct);
+                return;
+            }
+            catch (PlatformNotSupportedException)
+            {
+                throw;
+            }
+            catch when (attempt == 0 && _opt.AutoReconnect)
+            {
+                if (!payload.CanSeek) throw;
+
+                await ResetAsync();
+                await Task.Delay(_opt.ReconnectDelay ?? TimeSpan.FromSeconds(1), ct);
+                await ConnectAsync(ct);
+                payload.Position = startPos;
+            }
+        }
+    }
+
+    private async Task ProduceOnceAsync(byte[] key, Stream payload, ulong declaredSize, int chunkSize, CancellationToken ct)
+    {
+        if (_stream == null) throw new InvalidOperationException("not connected");
         await LoomProtocol.WriteMessageHeaderAsync(_stream, key, declaredSize, 0, ct);
 
         var buf = new byte[chunkSize];
@@ -71,14 +99,32 @@ public sealed class LoomProducer : IAsyncDisposable
         await _stream.FlushAsync(ct);
     }
 
-    public async ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync() => await ResetAsync();
+
+    private async Task ResetAsync()
     {
+        _stream = null;
+
         if (_duplex != null)
         {
             _duplex.Complete();
-            _hc?.Dispose();
+            _duplex = null;
         }
-        if (_qs != null) await _qs.DisposeAsync();
+
+        _hc?.Dispose();
+        _hc = null;
+
+        if (_qs != null)
+        {
+            await _qs.DisposeAsync();
+            _qs = null;
+        }
+
+        if (_qc != null)
+        {
+            await _qc.DisposeAsync();
+            _qc = null;
+        }
     }
 
     private SslClientAuthenticationOptions BuildSslOptions()

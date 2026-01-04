@@ -78,17 +78,38 @@ public sealed class LoomConsumer : IAsyncDisposable
 
     public async Task ConsumeLoopAsync(Func<byte[], Stream, ulong, CancellationToken, Task> onMessage, int maxKeyBytes = 256, int maxChunkBytes = 64 * 1024, CancellationToken ct = default)
     {
-        if (_rx == null || _tx == null) throw new InvalidOperationException("not connected");
-
+        var attempts = 0;
         while (!ct.IsCancellationRequested)
         {
-            var (key, declared, msgId) = await LoomProtocol.ReadMessageHeaderAsync(_rx, maxKeyBytes, ct);
-            await using var body = new LoomChunkStream(_rx, maxChunkBytes, ct);
+            try
+            {
+                await ConnectAsync(ct);
+                if (_rx == null || _tx == null) throw new InvalidOperationException("not connected");
+                attempts = 0;
 
-            await onMessage(key, body, declared, ct);
-            await body.DrainToEomAsync();
+                while (!ct.IsCancellationRequested)
+                {
+                    var (key, declared, msgId) = await LoomProtocol.ReadMessageHeaderAsync(_rx, maxKeyBytes, ct);
+                    await using var body = new LoomChunkStream(_rx, maxChunkBytes, ct);
 
-            await LoomProtocol.WriteAckAsync(_tx, msgId, ct);
+                    await onMessage(key, body, declared, ct);
+                    await body.DrainToEomAsync();
+
+                    await LoomProtocol.WriteAckAsync(_tx, msgId, ct);
+                }
+            }
+            catch (PlatformNotSupportedException)
+            {
+                throw;
+            }
+            catch when (!ct.IsCancellationRequested && _opt.AutoReconnect)
+            {
+                attempts++;
+                if (_opt.MaxReconnectAttempts > 0 && attempts >= _opt.MaxReconnectAttempts) throw;
+
+                await ResetAsync();
+                await Task.Delay(_opt.ReconnectDelay ?? TimeSpan.FromSeconds(1), ct);
+            }
         }
     }
 
@@ -172,12 +193,35 @@ public sealed class LoomConsumer : IAsyncDisposable
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
-    public async ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync() => await ResetAsync();
+
+    private async Task ResetAsync()
     {
-        if (_duplex != null) _duplex.Complete();
+        _rx = null;
+        _tx = null;
+
+        if (_duplex != null)
+        {
+            _duplex.Complete();
+            _duplex = null;
+        }
+
         _resp?.Dispose();
+        _resp = null;
+
         _hc?.Dispose();
-        if (_qs != null) await _qs.DisposeAsync();
-        if (_qc != null) await _qc.DisposeAsync();
+        _hc = null;
+
+        if (_qs != null)
+        {
+            await _qs.DisposeAsync();
+            _qs = null;
+        }
+
+        if (_qc != null)
+        {
+            await _qc.DisposeAsync();
+            _qc = null;
+        }
     }
 }

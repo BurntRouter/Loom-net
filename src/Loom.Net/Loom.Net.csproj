@@ -6,7 +6,7 @@
     <EnablePreviewFeatures>true</EnablePreviewFeatures>
     <NoWarn>$(NoWarn);CA2252</NoWarn>
     <PackageId>Loom-net</PackageId>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Authors>BurntRouter</Authors>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Description>.NET client library for the Loom service</Description>
